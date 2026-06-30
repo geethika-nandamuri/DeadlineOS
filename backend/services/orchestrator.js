@@ -238,7 +238,7 @@ async function runSequentialAIOrchestrator(tasks) {
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     // Format tasks for the prompt
     const tasksDataString = JSON.stringify(tasks.map(t => ({
@@ -410,7 +410,7 @@ async function runJarvisChat(tasks, schedule, risks, history, message) {
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     // Format tasks cleanly for context
     const cleanTasks = tasks.map(t => ({
@@ -462,7 +462,7 @@ module.exports = {
     if (!apiKey || apiKey.trim() === '') return null;
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
       const result = await model.generateContent(prompt);
       return result.response.text().trim();
     } catch (err) {
