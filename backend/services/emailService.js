@@ -6,19 +6,37 @@ let _transporter = null;
 function getTransporter() {
   if (_transporter) return _transporter;
 
-  if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  const hasUser = !!process.env.EMAIL_USER;
+  const hasPass = !!process.env.EMAIL_PASS;
+  const host    = process.env.EMAIL_HOST;
+  const port    = parseInt(process.env.EMAIL_PORT) || 587;
+  const secure  = port === 465;
+
+  console.log('[EMAIL] EMAIL_USER present:', hasUser);
+  console.log('[EMAIL] EMAIL_PASS present:', hasPass);
+  console.log('[EMAIL] SMTP host:', host);
+  console.log('[EMAIL] SMTP port:', port);
+  console.log('[EMAIL] Secure mode:', secure);
+
+  if (!host || !hasUser || !hasPass) {
     console.warn('[EMAIL] SMTP credentials not configured. Emails will be skipped.');
     return null;
   }
 
   _transporter = nodemailer.createTransport({
-    host:   process.env.EMAIL_HOST,
-    port:   parseInt(process.env.EMAIL_PORT) || 587,
-    secure: parseInt(process.env.EMAIL_PORT) === 465,
+    host,
+    port,
+    secure,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
+    connectionTimeout: 10000,
+    greetingTimeout:   10000,
+    socketTimeout:     15000,
+    dnsTimeout:        10000,
+    debug:  true,
+    logger: true,
   });
 
   return _transporter;
@@ -30,6 +48,20 @@ async function sendEmail({ to, subject, html, text }) {
   if (!transporter) {
     console.log(`[EMAIL SKIP] Would send "${subject}" to ${to}`);
     return { skipped: true };
+  }
+
+  try {
+    await transporter.verify();
+    console.log('[EMAIL] SMTP connection verified successfully.');
+  } catch (err) {
+    console.error('[EMAIL] SMTP verify failed — aborting send.');
+    console.error('[EMAIL] err.message:',      err.message);
+    console.error('[EMAIL] err.code:',         err.code);
+    console.error('[EMAIL] err.command:',      err.command);
+    console.error('[EMAIL] err.response:',     err.response);
+    console.error('[EMAIL] err.responseCode:', err.responseCode);
+    console.error('[EMAIL] err.stack:',        err.stack);
+    throw err;
   }
 
   const info = await transporter.sendMail({
