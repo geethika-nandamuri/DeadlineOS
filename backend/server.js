@@ -28,7 +28,9 @@ const startServer = async () => {
   if (process.env.NODE_ENV === 'development') {
     app.use('/api/debug',   require('./routes/debug'));
   }
-
+  app.get("/", (req, res) => {
+    res.send("Railway Backend Working");
+  });
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({
