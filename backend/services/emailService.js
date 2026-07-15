@@ -1,79 +1,49 @@
-﻿const nodemailer = require('nodemailer');
+const axios = require('axios');
 
-/* ─── Create transporter (lazy init so missing env vars don't crash startup) ─── */
-let _transporter = null;
+const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
 
-function getTransporter() {
-  if (_transporter) return _transporter;
-
-  const hasUser = !!process.env.EMAIL_USER;
-  const hasPass = !!process.env.EMAIL_PASS;
-  const host    = process.env.EMAIL_HOST;
-  const port    = parseInt(process.env.EMAIL_PORT) || 587;
-  const secure  = port === 465;
-
-  console.log('[EMAIL] EMAIL_USER present:', hasUser);
-  console.log('[EMAIL] EMAIL_PASS present:', hasPass);
-  console.log('[EMAIL] SMTP host:', host);
-  console.log('[EMAIL] SMTP port:', port);
-  console.log('[EMAIL] Secure mode:', secure);
-
-  if (!host || !hasUser || !hasPass) {
-    console.warn('[EMAIL] SMTP credentials not configured. Emails will be skipped.');
-    return null;
-  }
-
-  _transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-    connectionTimeout: 10000,
-    greetingTimeout:   10000,
-    socketTimeout:     15000,
-    dnsTimeout:        10000,
-    debug:  true,
-    logger: true,
-  });
-
-  return _transporter;
+/* ─── Parse "Name <email>" or plain email into { name, email } ─── */
+function parseSender(raw) {
+  const match = raw && raw.match(/^(.+)<(.+)>$/);
+  if (match) return { name: match[1].trim(), email: match[2].trim() };
+  return { email: raw || 'no-reply@deadlineos.com' };
 }
 
 /* ─── Generic send helper ─── */
 async function sendEmail({ to, subject, html, text }) {
-  const transporter = getTransporter();
-  if (!transporter) {
-    console.log(`[EMAIL SKIP] Would send "${subject}" to ${to}`);
+  if (!process.env.BREVO_API_KEY) {
+    console.log(`[EMAIL SKIP] BREVO_API_KEY not set. Would send "${subject}" to ${to}`);
     return { skipped: true };
   }
 
+  const payload = {
+    sender:   parseSender(process.env.EMAIL_FROM),
+    to:       [{ email: to }],
+    subject,
+    htmlContent: html,
+    textContent: text || html.replace(/<[^>]+>/g, ''),
+  };
+
+  console.log(`[EMAIL] Sending email "${subject}" to ${to}`);
+
   try {
-    await transporter.verify();
-    console.log('[EMAIL] SMTP connection verified successfully.');
+    const res = await axios.post(BREVO_API_URL, payload, {
+      headers: {
+        'accept':       'application/json',
+        'content-type': 'application/json',
+        'api-key':      process.env.BREVO_API_KEY,
+      },
+    });
+    console.log(`[EMAIL] Success — HTTP ${res.status}:`, res.data);
+    return res.data;
   } catch (err) {
-    console.error('[EMAIL] SMTP verify failed — aborting send.');
-    console.error('[EMAIL] err.message:',      err.message);
-    console.error('[EMAIL] err.code:',         err.code);
-    console.error('[EMAIL] err.command:',      err.command);
-    console.error('[EMAIL] err.response:',     err.response);
-    console.error('[EMAIL] err.responseCode:', err.responseCode);
-    console.error('[EMAIL] err.stack:',        err.stack);
+    console.error('[EMAIL] Failed to send email.');
+    console.error('[EMAIL] HTTP Status:',    err.response?.status);
+    console.error('[EMAIL] Response Body:',  err.response?.data);
+    console.error('[EMAIL] Axios Error:',    err.message);
+    console.error('[EMAIL] Stack Trace:',    err.stack);
     throw err;
   }
-
-  const info = await transporter.sendMail({
-    from: process.env.EMAIL_FROM || `DeadlineOS <no-reply@deadlineos.com>`,
-    to,
-    subject,
-    html,
-    text: text || html.replace(/<[^>]+>/g, ''),
-  });
-
-  console.log(`[EMAIL SENT] "${subject}" → ${to} (${info.messageId})`);
-  return info;
 }
 
 /* ─── Shared HTML layout wrapper ─── */
